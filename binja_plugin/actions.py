@@ -50,7 +50,7 @@ class RustStringSlice:
     @classmethod
     def create_binary_ninja_instance(cls, bv: BinaryView, location: int, name: str):
         bv.define_user_data_var(addr=location, var_type="RustStringSlice", name=name)
-        logger.log_info(f"Defined new RustStringSlice at {location:#x}")
+        logger.log_debug(f"Defined new RustStringSlice at {location:#x}")
 
 
 class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
@@ -110,7 +110,7 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
                             candidate_string_slice_data_ptr
                         )
                         logger.log_debug(
-                            f"Found pointer var at {candidate_string_slice_data_ptr.address:#x} ({candidate_string_slice_data_ptr}) pointing to {candidate_string_slice_data_ptr.value:#x} "
+                            f"Found pointer var at {candidate_string_slice_data_ptr.address:#x} ({candidate_string_slice_data_ptr}) pointing to {candidate_string_slice_data_ptr.value:#x}"
                         )
 
         recovered_string_slices: List[RustStringSlice] = []
@@ -171,7 +171,7 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
             # Sanity check whether the recovered string is valid UTF-8
             try:
                 candidate_utf8_string = candidate_string_slice.decode("utf-8")
-                logger.log_info(
+                logger.log_debug(
                     f'Recovered string at addr {candidate_string_slice_data_ptr.value:#x}, len {candidate_string_slice_len:#x}: "{candidate_utf8_string}"'
                 )
 
@@ -207,6 +207,9 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
                     name=f'str_"{candidate_utf8_string}"',
                 )
 
+                if len(recovered_string_slices) % 10 == 0:
+                    logger.log_info(f"Created {len(recovered_string_slices)} string slices so far.")
+
             except UnicodeDecodeError as err:
                 logger.log_warn(
                     f"Candidate string slice {candidate_string_slice} does not decode to a valid UTF-8 string; excluding from final results: {err}"
@@ -215,6 +218,7 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
         self.bv.commit_undo_actions()
         self.bv.update_analysis()
 
+        logger.log_info(f"Created {len(recovered_string_slices)} string slices in total.")
 
 class RecoverStringFromCodeTask(BackgroundTaskThread):
     def __init__(self, bv: BinaryView):
@@ -364,7 +368,7 @@ class RecoverStringFromCodeTask(BackgroundTaskThread):
                                             candidate_string_slice.decode("utf-8")
                                         )
 
-                                        logger.log_info(
+                                        logger.log_debug(
                                             f'Recovered string referenced in code at {code_ref.address:#x}, with data at addr {candidate_string_slice_data_addr:#x}, len {candidate_string_slice_len}: "{candidate_utf8_string}"'
                                         )
 
