@@ -5,7 +5,7 @@ from . import actions
 
 logger = Logger(session_id=0, logger_name=__name__)
 
-PLUGIN_NAME = "Rust String Slicer"
+PLUGIN_NAME = "Extended Rust String Slicer"
 
 plugin_commands = [
     (
