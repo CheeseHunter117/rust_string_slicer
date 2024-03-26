@@ -3,6 +3,7 @@ import json
 import pathlib
 import sys
 import logging
+from typing import Optional
 
 from binaryninja import core_version, load
 from binaryninja.binaryview import BinaryView

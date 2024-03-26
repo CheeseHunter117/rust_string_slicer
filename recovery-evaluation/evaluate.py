@@ -60,7 +60,7 @@ def filter_extracted(
             logger.debug(f"{extr=}")
             for s in split_on_format_args(extr):
                 logger.debug(f"{s=}")
-                if check_for_presence(s, binary, string_finder):
+                if len(s) != 0 and check_for_presence(s, binary, string_finder):
                     actually_present_extracted.append(s)
 
     logger.debug(f"{actually_present_extracted=}")
@@ -136,7 +136,8 @@ def split_on_format_args(literal_string: str) -> list[str]:
 def check_for_presence(
     extracted_str: str, binary: pathlib.Path, string_finder: StringFinder
 ) -> bool:
-    arguments = ["-q", extracted_str, str(binary)]
+    # -F / --fixed-strings makes it so that the "Pattern" input is not interpreted as a regular expression
+    arguments = ["-q", "--fixed-strings", extracted_str, str(binary)]
     match string_finder:
         case StringFinder.Ripgrep:
             arguments.insert(0, "rg")
@@ -145,7 +146,16 @@ def check_for_presence(
 
     try:
         proc = subprocess.run(arguments, capture_output=True)
-        return proc.returncode == 0
+        match proc.returncode:
+            case 0:
+                return True
+            case 1:
+                return False
+            case e:  # Some other error occurred
+                logger.warning(
+                    f"Could not check for presence of {repr(extracted_str)}: {str(string_finder)} returned {e}"
+                )
+                return False
     except ValueError as ve:
         logger.warning(f"Could not check for presence of {repr(extracted_str)}: {ve}")
 
