@@ -200,7 +200,10 @@ def main():
         recovered_json = json.load(f)
         logger.debug(f"{recovered_json=}")
     logger.info(
-        f"{len(recovered_json['strings'])} strings were recovered from the binary."
+        f"{len(recovered_json['strings']['rust_string_slicer'])} strings were recovered with rust_string_slicer."
+    )
+    logger.info(
+        f"{len(recovered_json['strings']['__builtin_strncpy'])} strings were recovered from __builtin_strncy calls."
     )
 
     string_finder = determine_string_finder()
@@ -213,7 +216,10 @@ def main():
         extracted_json, args.binary, string_finder
     )
     extracted_set = set(extracted_strings_present)
-    recovered_set = set(recovered_json["strings"])
+    recovered_set = set(
+        recovered_json["strings"]["rust_string_slicer"]
+        + recovered_json["strings"]["__builtin_strncpy"]
+    )
 
     logger.info(
         f"{len(extracted_strings_present)} of the extracted literal strings were found in the actual binary."

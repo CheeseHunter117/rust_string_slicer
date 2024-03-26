@@ -208,7 +208,9 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
                 )
 
                 if len(recovered_string_slices) % 10 == 0:
-                    logger.log_info(f"Created {len(recovered_string_slices)} string slices so far.")
+                    logger.log_info(
+                        f"Created {len(recovered_string_slices)} string slices so far."
+                    )
 
             except UnicodeDecodeError as err:
                 logger.log_warn(
@@ -218,8 +220,10 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
         self.bv.commit_undo_actions()
         self.bv.update_analysis()
 
-        logger.log_info(f"Created {len(recovered_string_slices)} string slices in total.")
-        
+        logger.log_info(
+            f"Created {len(recovered_string_slices)} string slices in total."
+        )
+
         # So that we can use it for our analysis
         return recovered_string_slices
 
