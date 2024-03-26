@@ -61,7 +61,7 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
         )
         self.bv = bv
 
-    def run(self):
+    def run(self) -> list[RustStringSlice]:
         if self.bv.arch is None:
             logger.log_error(
                 "Could not get architecture of current binary view, exiting"
@@ -219,6 +219,10 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
         self.bv.update_analysis()
 
         logger.log_info(f"Created {len(recovered_string_slices)} string slices in total.")
+        
+        # So that we can use it for our analysis
+        return recovered_string_slices
+
 
 class RecoverStringFromCodeTask(BackgroundTaskThread):
     def __init__(self, bv: BinaryView):
