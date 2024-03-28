@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import json
 import logging
@@ -5,7 +7,7 @@ import pathlib
 import string
 import subprocess
 from enum import Enum
-from sys import exit, stderr
+from sys import exit
 from typing import Optional
 
 # Logger Setup
@@ -28,20 +30,21 @@ LOG_LEVELS = {
 class StringFinder(Enum):
     Grep = 0
     Ripgrep = 1
+    RipgrepMultiline = 2
 
 
 def determine_string_finder() -> Optional[StringFinder]:
     try:
-        proc = subprocess.run(["rg", "--version"], capture_output=True)
+        proc = subprocess.run(["grep", "--version"], capture_output=True)
         if proc.returncode == 0:
-            return StringFinder.Ripgrep
+            return StringFinder.Grep
     except FileNotFoundError:
         pass
 
     try:
-        proc = subprocess.run(["grep", "--version"], capture_output=True)
+        proc = subprocess.run(["rg", "--version"], capture_output=True)
         if proc.returncode == 0:
-            return StringFinder.Grep
+            return StringFinder.RipgrepMultiline
     except FileNotFoundError:
         pass
 
@@ -137,10 +140,13 @@ def check_for_presence(
     extracted_str: str, binary: pathlib.Path, string_finder: StringFinder
 ) -> bool:
     # -F / --fixed-strings makes it so that the "Pattern" input is not interpreted as a regular expression
-    arguments = ["-q", "--fixed-strings", extracted_str, str(binary)]
+    arguments = ["-q", "--fixed-strings", "--", extracted_str, str(binary)]
     match string_finder:
         case StringFinder.Ripgrep:
             arguments.insert(0, "rg")
+        case StringFinder.RipgrepMultiline:
+            # -U / --multiline gives better handling of `\n` characters
+            arguments = ["rg", "--multiline"] + arguments
         case StringFinder.Grep:
             arguments.insert(0, "grep")
 
@@ -160,40 +166,7 @@ def check_for_presence(
         logger.warning(f"Could not check for presence of {repr(extracted_str)}: {ve}")
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "extracted",
-        metavar="EXTRACTED",
-        help="Path to the JSON file with the strings extracted from the source code.",
-        type=pathlib.Path,
-    )
-    parser.add_argument(
-        "recovered",
-        metavar="RECOVERED",
-        help="Path to the JSON file with the strings recovered from the compiled binary.",
-        type=pathlib.Path,
-    )
-    parser.add_argument(
-        "binary",
-        metavar="BINARY",
-        help="Path to the binary in question. Needed for filtering strings from EXTRACTED.",
-        type=pathlib.Path,
-    )
-    parser.add_argument(
-        "-l",
-        "--loglevel",
-        metavar="LOG-LEVEL",
-        help="Log level to display to stderr. Possible values are %(choices)s. (default: %(default)s)",
-        default="warning",
-        choices=["debug", "info", "warning", "error", "critical"],
-        type=str,
-    )
-
-    args = parser.parse_args()
-    logger.setLevel(LOG_LEVELS[args.loglevel])
-    logger.debug(f"main: {args=}")
-
+def main(args):
     extracted_json = {}
     with open(args.extracted, "r") as f:
         extracted_json = json.load(f)
@@ -216,11 +189,16 @@ def main():
         f"{len(recovered_json['strings']['__builtin_strncpy'])} strings were recovered from __builtin_strncy calls."
     )
 
-    string_finder = determine_string_finder()
-    logger.debug(f"{string_finder=}")
-    if string_finder is None:
-        logger.error("Either ripgrep (rg) or grep need to be installed on the system")
-        exit(1)
+    if args.string_finder is not None:
+        string_finder = StringFinder[args.string_finder]
+    else:
+        string_finder = determine_string_finder()
+        logger.debug(f"{string_finder=}")
+        if string_finder is None:
+            logger.error(
+                "Either ripgrep (rg) or grep need to be installed on the system"
+            )
+            exit(1)
 
     extracted_strings_present = filter_extracted(
         extracted_json, args.binary, string_finder
@@ -242,15 +220,100 @@ def main():
         f"{len(present_in_both)} appear in the duplicate free ones and the recovered ones."
     )
 
-    quota = len(present_in_both) / len(extracted_set)
-    print(f"{len(present_in_both)} / {len(extracted_set)} = {quota:.2%}")
+    if args.csv is None:
+        quota = len(present_in_both) / len(extracted_set)
+        print(f"{len(present_in_both)} / {len(extracted_set)} = {quota:.2%}")
+    else:
+        print(
+            args.csv.join(
+                [recovered_json["binary"], recovered_json["binary ninja version"]]
+                + [
+                    str(n)
+                    for n in [
+                        len(extracted_set),
+                        len(extracted_strings_present),
+                        len(recovered_set),
+                        len(present_in_both),
+                    ]
+                ]
+            )
+        )
 
     missing_from_recovered = extracted_set.difference(recovered_set)
     logger.info(f"{len(missing_from_recovered)} are missing from recovered.")
 
-    with open("/tmp/Json.json", "w") as f:
-        json.dump(list(missing_from_recovered), f)
+    if args.missing is not None:
+        with open(args.missing, "w") as f:
+            json.dump(
+                {
+                    "binary": recovered_json["binary"],
+                    "binary ninja version": recovered_json["binary ninja version"],
+                    "missing strings": sorted(list(missing_from_recovered)),
+                },
+                f,
+            )
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument(
+        "extracted",
+        metavar="EXTRACTED",
+        help="Path to the JSON file with the strings extracted from the source code.",
+        type=pathlib.Path,
+    )
+    parser.add_argument(
+        "recovered",
+        metavar="RECOVERED",
+        help="Path to the JSON file with the strings recovered from the compiled binary.",
+        type=pathlib.Path,
+    )
+    parser.add_argument(
+        "binary",
+        metavar="BINARY",
+        help="Path to the binary in question. Needed for filtering strings from EXTRACTED.",
+        type=pathlib.Path,
+    )
+
+    parser.add_argument(
+        "-c",
+        "--csv",
+        metavar="DELIMITER",
+        help="""Whether to render output CSV friendly.
+The fields are 'binary', 'BinaryNinja version', 'num extracted', 'num extracted in binary', 'num recovered', 'num intersection extracted present and recovered'.
+(default: '%(const)s')""",
+        nargs="?",
+        const=",",
+        default=None,
+        type=str,
+    )
+    parser.add_argument(
+        "-l",
+        "--loglevel",
+        metavar="LOG-LEVEL",
+        help="Log level to display to stderr.\nPossible values are %(choices)s.\n(default: %(default)s)",
+        default="warning",
+        choices=["debug", "info", "warning", "error", "critical"],
+        type=str,
+    )
+    parser.add_argument(
+        "-m",
+        "--missing",
+        metavar="PATH",
+        help="Path to where the JSON file with the strings that are missing from the recovery should be written to.\nExisting files will be overwritten.",
+        type=pathlib.Path,
+    )
+    parser.add_argument(
+        "-s",
+        "--string-finder",
+        metavar="STRING-FINDER",
+        help="Overwrite which string finder to use.\nPossible options are %(choices)s.",
+        choices=[s.name for s in StringFinder],
+        type=str,
+    )
+
+    args = parser.parse_args()
+    logger.setLevel(LOG_LEVELS[args.loglevel])
+    logger.debug(f"main: {args=}")
+
+    main(args)
