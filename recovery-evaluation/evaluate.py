@@ -204,25 +204,46 @@ def main(args):
         extracted_json, args.binary, string_finder
     )
     extracted_set = set(extracted_strings_present)
-    recovered_set = set(
-        recovered_json["strings"]["rust_string_slicer"]
-        + recovered_json["strings"]["__builtin_strncpy"]
-    )
+
+    rust_slices_set = set(recovered_json["strings"]["rust_string_slicer"])
+    strncpy_set = set(recovered_json["strings"]["__builtin_strncpy"])
+    everything_recovered_set = rust_slices_set.union(strncpy_set)
 
     logger.info(
         f"{len(extracted_strings_present)} of the extracted literal strings were found in the actual binary."
     )
     logger.info(f"{len(extracted_set)} with duplicates being removed.")
 
-    present_in_both = extracted_set.intersection(recovered_set)
-    logger.debug(f"{present_in_both=}")
+    extracted_and_rust_slices = extracted_set.intersection(rust_slices_set)
+    logger.debug(f"{extracted_and_rust_slices=}")
     logger.info(
-        f"{len(present_in_both)} appear in the duplicate free ones and the recovered ones."
+        f"{len(extracted_and_rust_slices)} appear in the duplicate free ones and the rust string slices."
+    )
+
+    extracted_and_strncpy = extracted_set.intersection(strncpy_set)
+    logger.debug(f"{extracted_and_strncpy=}")
+    logger.info(
+        f"{len(extracted_and_strncpy)} appear in the duplicate free ones and the __builtin_strncpy's."
+    )
+
+    extracted_and_everything = extracted_set.intersection(everything_recovered_set)
+    logger.debug(f"{extracted_and_everything=}")
+    logger.info(
+        f"{len(extracted_and_everything)} appear in the duplicate free ones and all the recovered strings."
     )
 
     if args.csv is None:
-        quota = len(present_in_both) / len(extracted_set)
-        print(f"{len(present_in_both)} / {len(extracted_set)} = {quota:.2%}")
+        rust_slices_quota = len(rust_slices_set) / len(extracted_set)
+        strncpy_quota = len(strncpy_set) / len(extracted_set)
+        everything_quota = len(everything_recovered_set) / len(extracted_set)
+
+        print(
+            f"{len(rust_slices_quota)} / {len(extracted_set)} = {rust_slices_quota:.2%}"
+        )
+        print(f"{len(strncpy_quota)} / {len(extracted_set)} = {strncpy_quota:.2%}")
+        print(
+            f"{len(everything_quota)} / {len(extracted_set)} = {everything_quota:.2%}"
+        )
     else:
         print(
             args.csv.join(
@@ -232,14 +253,18 @@ def main(args):
                     for n in [
                         len(extracted_set),
                         len(extracted_strings_present),
-                        len(recovered_set),
-                        len(present_in_both),
+                        len(rust_slices_set),
+                        len(strncpy_set),
+                        len(everything_recovered_set),
+                        len(extracted_and_rust_slices),
+                        len(extracted_and_strncpy),
+                        len(extracted_and_everything),
                     ]
                 ]
             )
         )
 
-    missing_from_recovered = extracted_set.difference(recovered_set)
+    missing_from_recovered = extracted_set.difference(everything_recovered_set)
     logger.info(f"{len(missing_from_recovered)} are missing from recovered.")
 
     if args.missing is not None:
@@ -280,7 +305,11 @@ if __name__ == "__main__":
         "--csv",
         metavar="DELIMITER",
         help="""Whether to render output CSV friendly.
-The fields are 'binary', 'BinaryNinja version', 'num extracted', 'num extracted in binary', 'num recovered', 'num intersection extracted present and recovered'.
+The fields are
+'binary', 'BinaryNinja version',
+'num extracted', 'num extracted in binary',
+'num rust slices', 'num __builtin_strncpy', 'num everything recovered',
+'num intersection extracted and rust slices', 'num intersection extracted and strncpy', 'num intersection present and everything recovered'.
 (default: '%(const)s')""",
         nargs="?",
         const=",",
