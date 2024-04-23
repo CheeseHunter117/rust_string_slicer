@@ -25,7 +25,7 @@ LOG_LEVELS = {
 
 
 def check_for_data_reference(string: str, bv: BinaryView) -> bool:
-    logger.debug(f"Checking '{string}'")
+    logger.debug(f"Checking '{string}' (len: {len(string):#x})")
 
     # Early return on illogical input
     if len(string) == 0:
@@ -71,7 +71,13 @@ def main(args: argparse.Namespace):
         potential_rust_string_slices = [
             s for s in missing_strings if check_for_data_reference(s, bv)
         ]
-        logger.debug(f"{potential_rust_string_slices=}")
+        logger.info(f"{potential_rust_string_slices=}")
+
+        if args.output is not None:
+            with open(args.output, "w") as f:
+                json.dump(
+                    {"potential rust string slices": potential_rust_string_slices}, f
+                )
 
 
 if __name__ == "__main__":
@@ -97,6 +103,13 @@ if __name__ == "__main__":
         default="warning",
         choices=["debug", "info", "warning", "error", "critical"],
         type=str,
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        metavar="OUTPUT",
+        help="Write final output to file.",
+        type=pathlib.Path,
     )
 
     args = parser.parse_args()
