@@ -31,13 +31,10 @@ def check_for_data_reference(string: str, bv: BinaryView) -> bool:
     if len(string) == 0:
         return False
 
-    # DEBUG
-    if string.strip() == "" or len(string) < 5:
-        return False
-
-    for address, matched_string, linear_disassembly in bv.find_all_text(
-        bv.start, bv.end, string
+    for address, _ in bv.find_all_data(
+        bv.start, bv.end, string.encode(encoding="utf-8")
     ):
+        logger.debug(f"Found at {address:#x}")
         undo = bv.begin_undo_actions()
 
         # Define address as char[] with known length.
@@ -45,14 +42,19 @@ def check_for_data_reference(string: str, bv: BinaryView) -> bool:
         bv.define_data_var(address, ArrayType.create(CharType.create(), len(string)))
 
         for data_ref in bv.get_data_refs(address):
-            if data_ref == address:
-                logger.info(f"Found data reference to '{string}': {data_ref=}")
+            logger.debug(f"data ref: {data_ref:#x}")
+
+            data_ref_points_to = bv.read_pointer(data_ref)
+            if data_ref_points_to == address:
+                logger.info(
+                    f"Found data reference to '{string}': {data_ref_points_to:#x}"
+                )
                 return True
             elif (
-                address < data_ref <= (address + len(string))
+                address < data_ref_points_to <= (address + len(string))
             ):  # TODO: is this an off-by-one error?
                 logger.warning(
-                    f"Found data reference to inside '{string}': {address=}, {data_ref=}"
+                    f"Found data reference to inside '{string}': {address=}, {data_ref_points_to:#x}"
                 )
 
         bv.revert_undo_actions(undo)
