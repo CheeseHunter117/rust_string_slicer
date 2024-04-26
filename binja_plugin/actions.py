@@ -207,7 +207,7 @@ class RecoverStringFromReadOnlyDataTask(BackgroundTaskThread):
                     name=f'str_"{candidate_utf8_string}"',
                 )
 
-                if len(recovered_string_slices) % 10 == 0:
+                if len(recovered_string_slices) % 100 == 0:
                     logger.log_info(
                         f"Created {len(recovered_string_slices)} string slices so far."
                     )
