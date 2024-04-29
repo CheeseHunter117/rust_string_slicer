@@ -24,7 +24,7 @@ LOG_LEVELS = {
 }
 
 
-def check_for_data_reference(string: str, bv: BinaryView) -> bool:
+def check_for_data_reference(bv: BinaryView, string: str) -> bool:
     logger.debug(f"Checking '{string}' (len: {len(string):#x})")
 
     # Early return on illogical input
@@ -62,6 +62,12 @@ def check_for_data_reference(string: str, bv: BinaryView) -> bool:
     return False
 
 
+def find_potential_rust_string_slices(
+    bv: BinaryView, missing_strings: list[str]
+) -> list[str]:
+    return [s for s in missing_strings if check_for_data_reference(bv, s)]
+
+
 def main(args: argparse.Namespace):
     with open(args.json, "r") as f:
         missing_json = json.load(f)
@@ -72,9 +78,9 @@ def main(args: argparse.Namespace):
     with load(args.binary) as bv:
         logger.debug(f"{bv=}")
 
-        potential_rust_string_slices = [
-            s for s in missing_strings if check_for_data_reference(s, bv)
-        ]
+        potential_rust_string_slices = find_potential_rust_string_slices(
+            bv, missing_strings
+        )
         logger.info(f"{potential_rust_string_slices=}")
 
         if args.output is not None:
@@ -85,7 +91,9 @@ def main(args: argparse.Namespace):
                         # Potentially problematic because the Binary Ninja version that was used for the creation of the Missing-*.json file
                         # and this script could be different.
                         "binary ninja versions": missing_json["binary ninja version"],
-                        "potential rust string slices": sorted(potential_rust_string_slices),
+                        "potential rust string slices": sorted(
+                            potential_rust_string_slices
+                        ),
                     },
                     f,
                 )

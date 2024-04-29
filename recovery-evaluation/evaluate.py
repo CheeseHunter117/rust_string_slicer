@@ -10,6 +10,9 @@ from enum import Enum
 from sys import exit
 from typing import Optional
 
+from potential_missing_rust_slices import find_potential_rust_string_slices
+from binaryninja import load, core_version
+
 # Logger Setup
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -232,17 +235,33 @@ def main(args):
         f"{len(extracted_and_everything)} appear in the duplicate free ones and all the recovered strings."
     )
 
+    missing_from_recovered = extracted_set.difference(everything_recovered_set)
+    logger.info(f"{len(missing_from_recovered)} are missing from recovered.")
+
+    with load(args.binary) as bv:
+        potential_rust_string_slices = sorted(
+            find_potential_rust_string_slices(bv, list(missing_from_recovered))
+        )
+        logger.debug(f"{potential_rust_string_slices=}")
+        logger.info(
+            f"{len(potential_rust_string_slices)} of the missing strings are potential rust string slices."
+        )
+
     if args.csv is None:
         rust_slices_quota = len(rust_slices_set) / len(extracted_set)
+        potential_slices_quota = len(potential_rust_string_slices) / len(extracted_set)
         strncpy_quota = len(strncpy_set) / len(extracted_set)
         everything_quota = len(everything_recovered_set) / len(extracted_set)
 
         print(
-            f"{len(rust_slices_quota)} / {len(extracted_set)} = {rust_slices_quota:.2%}"
+            f"{len(rust_slices_set)} / {len(extracted_set)} = {rust_slices_quota:.2%}"
         )
-        print(f"{len(strncpy_quota)} / {len(extracted_set)} = {strncpy_quota:.2%}")
         print(
-            f"{len(everything_quota)} / {len(extracted_set)} = {everything_quota:.2%}"
+            f"{len(potential_rust_string_slices)} / {len(extracted_set)} = {potential_slices_quota:.2%}"
+        )
+        print(f"{len(strncpy_set)} / {len(extracted_set)} = {strncpy_quota:.2%}")
+        print(
+            f"{len(everything_recovered_set)} / {len(extracted_set)} = {everything_quota:.2%}"
         )
     else:
         print(
@@ -254,6 +273,7 @@ def main(args):
                         len(extracted_set),
                         len(extracted_strings_present),
                         len(rust_slices_set),
+                        len(potential_rust_string_slices),
                         len(strncpy_set),
                         len(everything_recovered_set),
                         len(extracted_and_rust_slices),
@@ -264,9 +284,6 @@ def main(args):
             )
         )
 
-    missing_from_recovered = extracted_set.difference(everything_recovered_set)
-    logger.info(f"{len(missing_from_recovered)} are missing from recovered.")
-
     if args.missing is not None:
         with open(args.missing, "w") as f:
             json.dump(
@@ -276,6 +293,19 @@ def main(args):
                     "missing strings": sorted(list(missing_from_recovered)),
                 },
                 f,
+            )
+
+    if args.potential is not None:
+        with open(args.potential, "w") as f:
+            json.dump(
+                {
+                    "binary": recovered_json["binary"],
+                    "binary ninja version": {
+                        "original recovery": recovered_json["binary ninja version"],
+                        "potential rust string slices recovery": core_version(),
+                    },
+                    "potential rust string slices": potential_rust_string_slices,
+                }
             )
 
 
@@ -330,6 +360,13 @@ The fields are
         "--missing",
         metavar="PATH",
         help="Path to where the JSON file with the strings that are missing from the recovery should be written to.\nExisting files will be overwritten.",
+        type=pathlib.Path,
+    )
+    parser.add_argument(
+        "-p",
+        "--potential",
+        metavar="PATH",
+        help="Path to where the JSON file with the potentially missing rust string slices should be written to.\nExisting files will be overwritten.",
         type=pathlib.Path,
     )
     parser.add_argument(
