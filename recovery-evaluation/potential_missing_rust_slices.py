@@ -64,8 +64,10 @@ def check_for_data_reference(string: str, bv: BinaryView) -> bool:
 
 def main(args: argparse.Namespace):
     with open(args.json, "r") as f:
-        missing_strings = json.load(f)["missing strings"]
-        logger.debug(f"{missing_strings=}")
+        missing_json = json.load(f)
+
+    missing_strings = missing_json["missing strings"]
+    logger.debug(f"{missing_strings=}")
 
     with load(args.binary) as bv:
         logger.debug(f"{bv=}")
@@ -78,7 +80,14 @@ def main(args: argparse.Namespace):
         if args.output is not None:
             with open(args.output, "w") as f:
                 json.dump(
-                    {"potential rust string slices": potential_rust_string_slices}, f
+                    {
+                        "binary": str(args.binary),
+                        # Potentially problematic because the Binary Ninja version that was used for the creation of the Missing-*.json file
+                        # and this script could be different.
+                        "binary ninja versions": missing_json["binary ninja version"],
+                        "potential rust string slices": sorted(potential_rust_string_slices),
+                    },
+                    f,
                 )
 
 
