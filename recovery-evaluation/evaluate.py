@@ -305,7 +305,8 @@ def main(args):
                         "potential rust string slices recovery": core_version(),
                     },
                     "potential rust string slices": potential_rust_string_slices,
-                }
+                },
+                f
             )
 
 
